@@ -5,8 +5,8 @@
  * Derives the canonical migration list from db/migrations.json.
  *
  * Tests:
- *   A. Manifest integrity: all 17 SQL files exist, no unlisted files
- *   B. FRESH INSTALL: apply all 17 migrations on a clean PGlite instance
+ *   A. Manifest integrity: all listed SQL files exist, no unlisted or duplicate files
+ *   B. FRESH INSTALL: apply the complete manifest on a clean PGlite instance
  *   C. UPGRADE: apply 001-012, seed legacy data, then apply 013 only
  *   D. Direct DB postal-code invariant assertions (A-G from spec)
  *
@@ -128,7 +128,8 @@ async function newDb(): Promise<PGlite> {
 async function testManifestIntegrity(): Promise<void> {
   console.log('\n--- A. Manifest integrity ---');
 
-  assert.equal(CANONICAL_LIST.length, 20, `Expected 20 canonical migrations, got ${CANONICAL_LIST.length}`);
+  assert.equal(CANONICAL_LIST.length, 22, `Expected 22 canonical migrations, got ${CANONICAL_LIST.length}`);
+  assert.equal(new Set(CANONICAL_LIST).size, CANONICAL_LIST.length, 'Canonical migrations must not contain duplicates');
   console.log(`  ✓ Canonical count = ${CANONICAL_LIST.length}`);
 
   // Every listed file must exist on disk
@@ -136,7 +137,7 @@ async function testManifestIntegrity(): Promise<void> {
     const fullPath = path.join(DB_DIR, file);
     assert.ok(fs.existsSync(fullPath), `Listed migration missing from disk: ${file}`);
   }
-  console.log('  ✓ All 20 listed migration files exist on disk');
+  console.log(`  ✓ All ${CANONICAL_LIST.length} listed migration files exist on disk`);
 
   // No unlisted .sql files should exist in db/
   const onDisk = fs.readdirSync(DB_DIR)
@@ -148,9 +149,11 @@ async function testManifestIntegrity(): Promise<void> {
   }
   console.log(`  ✓ No unlisted SQL files found in db/ (${onDisk.length} total)`);
 
-  // Spot-check canonical ordering
+  // Spot-check canonical ordering, including the appended parcel-timing migration.
   assert.equal(CANONICAL_LIST[0],  '001_shipdehop.sql',                  'First migration must be 001');
-  assert.equal(CANONICAL_LIST[19], '016_cloudflare_coord_validation_rpc.sql',  'Last migration must be 016');
+  assert.equal(CANONICAL_LIST[19], '016_cloudflare_coord_validation_rpc.sql', '016 must remain immediately before 017');
+  assert.equal(CANONICAL_LIST[20], '017_assistant_parcel_timing.sql',    '017 must remain immediately before 018');
+  assert.equal(CANONICAL_LIST[21], '018_identity_admin_review_queue.sql', 'Last migration must be 018');
   assert.ok(
     CANONICAL_LIST.indexOf('012_release_contract_fixes.sql') <
     CANONICAL_LIST.indexOf('013_release_closeout_hardening.sql'),
@@ -159,10 +162,10 @@ async function testManifestIntegrity(): Promise<void> {
   console.log('  ✓ Ordering invariants satisfied');
 }
 
-// ─── Test B: Fresh install — all 17 migrations ────────────────────────────────
+// ─── Test B: Fresh install — complete canonical manifest ──────────────────────
 
 async function testFreshInstall(): Promise<PGlite> {
-  console.log('\n--- B. FRESH INSTALL (all 17 migrations on clean DB) ---');
+  console.log(`\n--- B. FRESH INSTALL (all ${CANONICAL_LIST.length} migrations on clean DB) ---`);
   const db = await newDb();
   await applyMigrations(db, CANONICAL_LIST);
 
@@ -191,7 +194,25 @@ async function testFreshInstall(): Promise<PGlite> {
   );
   assert.equal(con.rows.length, 1, 'ship_eligible_requires_postal constraint must exist after 013');
 
-  console.log('  ✓ Fresh install: all 17 migrations applied, schema validated');
+  const identityAdminFn = await db.query<{count: number}>(
+    `SELECT count(*)::int AS count
+       FROM pg_proc p
+       JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.proname = 'admin_review_identity'`,
+  );
+  assert.equal(identityAdminFn.rows[0]?.count, 1, 'admin_review_identity RPC must exist after 018');
+
+  const auditConstraint = await db.query<{definition: string}>(
+    `SELECT pg_get_constraintdef(oid) AS definition
+       FROM pg_constraint
+      WHERE conrelid = 'public.identity_verification_audit'::regclass
+        AND conname = 'identity_verification_audit_review_method_check'`,
+  );
+  assert.equal(auditConstraint.rows.length, 1, 'identity audit review-method constraint must exist');
+  assert.match(auditConstraint.rows[0]?.definition ?? '', /MANUAL_REVIEW_ADMIN/);
+  assert.match(auditConstraint.rows[0]?.definition ?? '', /MANUAL_BETA/);
+
+  console.log(`  ✓ Fresh install: all ${CANONICAL_LIST.length} migrations applied, schema validated`);
   return db;
 }
 
@@ -387,7 +408,8 @@ async function run(): Promise<void> {
   await testPostalInvariantsDirect(freshDb);
   await freshDb.close();
 
-  await testUpgradeFrom012();
+  const upgradeDb = await testUpgradeFrom012();
+  await upgradeDb.close();
 
   console.log('\n🎉 ALL MIGRATION ORDER + POSTAL INVARIANT TESTS PASSED!\n');
 }
