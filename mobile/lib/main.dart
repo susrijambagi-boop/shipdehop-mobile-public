@@ -9,7 +9,7 @@ import 'screens/app_bootstrapping_screen.dart';
 import 'screens/main_home_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/restricted_account_screen.dart';
-import 'screens/sign_in_screen.dart';
+import 'screens/phone_auth_screen.dart';
 import 'theme/shipdehop_theme.dart';
 
 Future<void> main() async {
@@ -31,16 +31,13 @@ Future<void> main() async {
 /// screens. Keeping this decision pure makes the progressive-verification
 /// policy easy to test without starting timers/subscriptions owned by Home.
 Widget resolveShipdeHopHome(AppAuthState authState) {
-  if (const bool.fromEnvironment('SCREENSHOT_MODE', defaultValue: false)) {
-    return const MainHomeScreen();
-  }
   switch (authState.flowStatus) {
     case AuthFlowStatus.loading:
       return const AppBootstrappingScreen();
     case AuthFlowStatus.unauthenticated:
-      // The release entry point is email magic-link auth. The older WhatsApp
-      // verification screen remains dormant until its Meta webhook is configured.
-      return const SignInScreen();
+      // India-first release entry point: phone/WhatsApp verification first,
+      // with email magic-link available only as the secondary fallback.
+      return const PhoneAuthScreen();
     case AuthFlowStatus.authenticatedIdentityRequired:
     case AuthFlowStatus.authenticatedIdentityPending:
     case AuthFlowStatus.authenticatedVerified:
