@@ -12,15 +12,15 @@ const pointSchema = z.object({
 export async function locationRoutes(app: FastifyInstance): Promise<void> {
   // Search places in India using production geocoding service
   app.get('/location/search', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { q } = z.object({ q: z.string().min(1) }).parse(request.query);
+    const { q } = z.object({ q: z.string().optional().default('') }).parse(request.query);
+    const cleanQuery = q.trim();
 
-    const results = await searchGeocodingProvider(q);
-
-    if (!results || results.length === 0) {
-      throw app.httpErrors.notFound('No matching location found in India');
+    if (!cleanQuery) {
+      return { results: [] };
     }
 
-    return { results };
+    const results = await searchGeocodingProvider(cleanQuery);
+    return { results: results || [] };
   });
 
   // Reverse geocode lat/lon
