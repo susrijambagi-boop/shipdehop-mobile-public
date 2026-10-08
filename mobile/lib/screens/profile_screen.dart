@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api_client.dart';
+import '../core/admin_access.dart';
 import '../core/app_config.dart';
 import '../providers/app_providers.dart';
 import '../providers/phase15_providers.dart';
@@ -10,6 +11,23 @@ import 'hop_club_screen.dart';
 import 'help_support_screen.dart';
 import 'profile_option_screens.dart';
 import 'lifecycle_simulator_screen.dart';
+import 'identity_verification_screen.dart';
+import 'admin_identity_review_screen.dart';
+import 'admin_whatsapp_bridge_screen.dart';
+
+final _adminPendingIdentityCountProvider = FutureProvider<int>((ref) async {
+  final authUser = ref.watch(authUserProvider).value;
+  if (!isShipdeHopAdmin(authUser?.appMetadata)) return 0;
+
+  final rows = await ref
+      .watch(supabaseProvider)
+      .from('user_identities')
+      .select('id')
+      .eq('verification_status', 'PENDING_REVIEW')
+      .limit(100);
+
+  return (rows as List<dynamic>).length;
+});
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -100,8 +118,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           final trustScore = ((profile['trustScore'] ?? profile['trust_score']) as num?)?.toDouble() ?? 0;
           final xpPoints = ((profile['xpPoints'] ?? profile['xp_points']) as num?)?.toInt() ?? 0;
           final completed = (profile['completedTransactionsCount'] as num?)?.toInt() ?? 0;
-          final ekycTier = profile['ekycTier']?.toString() ?? '';
-          final identityVerified = ekycTier.startsWith('TIER_') && ekycTier != 'TIER_0';
+          final identityStatus =
+              profile['identityVerificationStatus']?.toString().toUpperCase() ??
+                  'NOT_STARTED';
+          final identityVerified = profile['isIdentityVerified'] == true ||
+              identityStatus == 'VERIFIED';
+          final identityPending =
+              identityStatus == 'PENDING_REVIEW' || identityStatus == 'IN_PROGRESS';
+          final identityNeedsAttention =
+              identityStatus == 'REJECTED' || identityStatus == 'BLOCKED';
+          final isAdmin = isShipdeHopAdmin(authUser?.appMetadata);
+          final adminPendingCount = isAdmin
+              ? ref.watch(_adminPendingIdentityCountProvider).maybeWhen(
+                    data: (count) => count,
+                    orElse: () => null,
+                  )
+              : null;
+          final identityLabel = identityVerified
+              ? 'ShipdeHop Verified'
+              : identityPending
+                  ? 'Identity under review'
+                  : identityNeedsAttention
+                      ? 'Verification needs attention'
+                      : 'Verification not completed';
           final levelNum = framework.currentLevel.index + 1;
           final progress = _levelProgress(framework.xp, framework.currentLevel.index);
 
@@ -140,7 +179,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             children: [
                               Icon(identityVerified ? Icons.verified_user_rounded : Icons.shield_outlined, size: 14, color: identityVerified ? ShipdeHopColors.success : ShipdeHopColors.textMuted),
                               const SizedBox(width: 6),
-                              Flexible(child: Text(identityVerified ? 'ShipdeHop Verified' : 'Verification not completed', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: identityVerified ? ShipdeHopColors.success : ShipdeHopColors.textSecondary))),
+                              Flexible(child: Text(identityLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: identityVerified ? ShipdeHopColors.success : ShipdeHopColors.textSecondary))),
                             ],
                           ),
                         ),
@@ -149,21 +188,89 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ),
                 ],
               ),
+              if (!identityVerified) ...[
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () => Navigator.push<void>(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => const IdentityVerificationScreen(),
+                    ),
+                  ),
+                  icon: const Icon(Icons.verified_user_outlined),
+                  label: Text(identityPending ? 'View verification' : 'Verify identity'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 48),
+                    backgroundColor: ShipdeHopColors.brandPrimary,
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               Row(
                 children: [
-                  Expanded(child: _stat('Trust Score', '${trustScore.toInt()} / 100', Icons.shield_rounded, ShipdeHopColors.success)),
+                  Expanded(
+                    child: _stat(
+                      'Trust Score',
+                      '${trustScore.toInt()} / 100',
+                      Icons.shield_rounded,
+                      ShipdeHopColors.success,
+                      onTap: () => Navigator.push<void>(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => const SafetyPrivacyScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  Expanded(child: _stat('XP Points', '$xpPoints', Icons.bolt_rounded, ShipdeHopColors.squirrelOrange)),
+                  Expanded(
+                    child: _stat(
+                      'XP Points',
+                      '$xpPoints',
+                      Icons.bolt_rounded,
+                      ShipdeHopColors.squirrelOrange,
+                      onTap: () => Navigator.push<void>(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => const HopClubScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  Expanded(child: _stat('HOPS', '$completed', Icons.route_rounded, ShipdeHopColors.brandPrimary)),
+                  Expanded(
+                    child: _stat(
+                      'HOPS',
+                      '$completed',
+                      Icons.route_rounded,
+                      ShipdeHopColors.brandPrimary,
+                      onTap: () => Navigator.push<void>(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => const HopClubScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-                child: Column(
+              InkWell(
+                key: const Key('profile_level_card'),
+                onTap: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const HopClubScreen(),
+                  ),
+                ),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
@@ -179,6 +286,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       child: LinearProgressIndicator(value: progress, minHeight: 9, backgroundColor: const Color(0xFFF0EEF7), color: ShipdeHopColors.squirrelOrange),
                     ),
                   ],
+                ),
                 ),
               ),
               const SizedBox(height: 14),
@@ -211,7 +319,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 _ProfileRow(
                   Icons.account_balance_wallet_outlined,
                   'Payments & payouts',
-                  'Coming soon in beta',
+                  'In-app payments not enabled',
                   onTap: () => Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => PaymentsPayoutsScreen(profile: profile))),
                 ),
                 _ProfileRow(
@@ -233,6 +341,42 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   onTap: () => Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => const AccountSettingsScreen())),
                 ),
               ]),
+              if (isAdmin) ...[
+                const SizedBox(height: 18),
+                Text('ADMIN', style: ShipdeHopTypography.labelSmall.copyWith(letterSpacing: 1.1)),
+                const SizedBox(height: 10),
+                _group([
+                  _ProfileRow(
+                    Icons.admin_panel_settings_outlined,
+                    'Verification requests',
+                    adminPendingCount == null
+                        ? 'Checking pending requests…'
+                        : adminPendingCount == 0
+                            ? 'No pending requests'
+                            : adminPendingCount.toString() + ' pending request' + (adminPendingCount == 1 ? '' : 's'),
+                    onTap: () async {
+                      await Navigator.push<void>(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AdminIdentityReviewScreen(),
+                        ),
+                      );
+                      ref.invalidate(_adminPendingIdentityCountProvider);
+                    },
+                  ),
+                  _ProfileRow(
+                    Icons.chat_rounded,
+                    'WhatsApp OTP sender',
+                    'Connection, pairing and health',
+                    onTap: () => Navigator.push<void>(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AdminWhatsAppBridgeScreen(),
+                      ),
+                    ),
+                  ),
+                ]),
+              ],
               const SizedBox(height: 18),
               Text('SUPPORT', style: ShipdeHopTypography.labelSmall.copyWith(letterSpacing: 1.1)),
               const SizedBox(height: 10),
@@ -314,15 +458,61 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return ((xp - start) / (end - start)).clamp(0.0, 1.0).toDouble();
   }
 
-  Widget _stat(String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(17)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [Icon(icon, size: 13, color: color), const SizedBox(width: 5), Expanded(child: Text(label, style: ShipdeHopTypography.labelSmall))]),
-        const SizedBox(height: 8),
-        FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(value, style: ShipdeHopTypography.displayMedium.copyWith(fontSize: 19))),
-      ]),
+  Widget _stat(
+    String label,
+    String value,
+    IconData icon,
+    Color color, {
+    VoidCallback? onTap,
+  }) {
+    return Semantics(
+      button: onTap != null,
+      label: onTap == null ? null : '$label, $value. Open details.',
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(17),
+        child: InkWell(
+          key: Key('profile_stat_${label.toLowerCase().replaceAll(' ', '_')}'),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(17),
+          child: Padding(
+            padding: const EdgeInsets.all(13),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(icon, size: 13, color: color),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: ShipdeHopTypography.labelSmall,
+                      ),
+                    ),
+                    if (onTap != null)
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 14,
+                        color: ShipdeHopColors.textMuted,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    style:
+                        ShipdeHopTypography.displayMedium.copyWith(fontSize: 19),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
