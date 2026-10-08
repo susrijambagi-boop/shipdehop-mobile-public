@@ -1,0 +1,25 @@
+{
+  "description": "ShipdeHop authoritative migration sequence. This file is the single source of truth consumed by both the migration-order test suite and human documentation. Do NOT reorder entries. Only append at the end.",
+  "migrations": [
+    "001_shipdehop.sql",
+    "002_ride_requests.sql",
+    "002_grant_reserve_shipment_order_to_authenticated.sql",
+    "003_parcel_capacity.sql",
+    "003_grant_funding_services_to_authenticated.sql",
+    "004_notifications.sql",
+    "004_restore_service_role_isolation.sql",
+    "005_marketplace_integration.sql",
+    "006_unified_history_messages_trust.sql",
+    "007_phone_identity_verification.sql",
+    "008_identity_beta_hardening.sql",
+    "009_india_location_enforcement.sql",
+    "010_india_route_coverage.sql",
+    "010_journey_capabilities_matching_security.sql",
+    "011_accepts_parcels_capability.sql",
+    "012_release_contract_fixes.sql",
+    "013_release_closeout_hardening.sql",
+    "014_production_security_hardening.sql",
+    "015_cloudflare_route_validation_rpc.sql",
+    "016_cloudflare_coord_validation_rpc.sql"
+  ]
+}

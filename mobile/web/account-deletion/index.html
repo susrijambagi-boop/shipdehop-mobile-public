@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Deletion Request — ShipdeHop</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #131b2e;
+      --border: #1e293b;
+      --primary: #6366f1;
+      --primary-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --danger: #ef4444;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 0;
+      line-height: 1.6;
+    }
+    .header {
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .brand {
+      font-size: 22px;
+      font-weight: 800;
+      background: var(--primary-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .container {
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 24px 60px;
+    }
+    h1 {
+      font-size: 32px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 16px;
+      margin-bottom: 32px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      margin-bottom: 24px;
+    }
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #a5b4fc;
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+    ul, ol {
+      padding-left: 20px;
+    }
+    li {
+      margin-bottom: 8px;
+    }
+    a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .alert-box {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid var(--danger);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+      color: #fca5a5;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">ShipdeHop</div>
+    <a href="/" style="font-size: 14px; color: var(--text-muted);">Back to App</a>
+  </div>
+  <div class="container">
+    <h1>Account & Data Deletion Request</h1>
+    <div class="subtitle">Options and instructions to request deletion of your ShipdeHop account and associated data.</div>
+
+    <div class="alert-box">
+      <strong>Important Notice:</strong> Account deletion revokes authentication access and purges personal profile information. Once processed, you will no longer be able to sign in with your account.
+    </div>
+
+    <div class="card">
+      <h2>Option 1: In-App Deletion (Recommended)</h2>
+      <p>If you have access to the ShipdeHop mobile app, you can initiate account deletion directly:</p>
+      <ol>
+        <li>Open the <strong>ShipdeHop</strong> mobile app.</li>
+        <li>Navigate to <strong>Profile</strong> &rarr; <strong>Settings</strong> &rarr; <strong>Delete account & data</strong>.</li>
+        <li>Confirm your decision in the prompt. Your personal profile details will be purged and authentication access will be permanently revoked.</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h2>Option 2: External Email Request</h2>
+      <p>If you cannot access the mobile app, you can submit an account deletion request via email:</p>
+      <ul>
+        <li>Send an email from your registered email address to <a href="mailto:shipsterheadquarter@gmail.com">shipsterheadquarter@gmail.com</a>.</li>
+        <li>Subject line: <code>ACCOUNT DELETION REQUEST</code></li>
+        <li>Our compliance team will verify registered account ownership and process the deletion within 7 business days.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Data Retention & Anonymization Disclosures</h2>
+      <p>When an account deletion is executed:</p>
+      <ul>
+        <li><strong>Personal Identifiers:</strong> Your email address, profile name, phone number, avatar URL, and active listings are permanently deleted or irreversibly anonymized.</li>
+        <li><strong>Authentication Identity:</strong> Your sign-in identity is deleted or permanently deactivated in our authentication system.</li>
+        <li><strong>Legally Required Audit Records:</strong> Completed transaction logs and security safety records are retained strictly in an anonymized format for legal compliance and dispute prevention as required by applicable laws.</li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shipdehop-api",
+  "main": "worker.ts",
+  "compatibility_date": "2026-10-03",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "NODE_ENV": "production",
+    "PORT": "8080",
+    "DEV_TEST_AUTH": "false",
+    "PAYMENT_PROVIDER": "DISABLED",
+    "AADHAAR_VERIFICATION_ENABLED": "false",
+    "AADHAAR_ONLINE_ENABLED": "false",
+    "UIDAI_ONLINE_PRODUCTION_APPROVED": "false",
+    "AADHAAR_PROVIDER": "DISABLED",
+    "PHONE_VERIFICATION_ENABLED": "true",
+    "PHONE_VERIFICATION_PROVIDER": "MANUAL_BETA",
+    "PARCEL_INSPECTION_PROVIDER": "GEMINI"
+  },
+  "secrets": {
+    "required": [
+      "SUPABASE_URL",
+      "SUPABASE_PUBLISHABLE_KEY",
+      "SUPABASE_SECRET_KEY",
+      "GEMINI_API_KEY",
+      "SHIPDEHOP_JWT_PRIVATE_JWK",
+      "WHATSAPP_BOT_NUMBER",
+      "GEOAPIFY_API_KEY"
+    ]
+  }
+}

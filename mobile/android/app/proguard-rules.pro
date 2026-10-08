@@ -1,0 +1,5 @@
+-dontwarn com.stripe.**
+-dontwarn com.razorpay.**
+-dontwarn com.google.android.gms.**
+-keep class com.stripe.** { *; }
+-keep class com.razorpay.** { *; }

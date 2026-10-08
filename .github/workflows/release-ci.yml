@@ -1,0 +1,79 @@
+name: Release CI
+
+on:
+  push:
+    branches:
+      - main
+      - antigravity-build
+  pull_request:
+    branches:
+      - main
+      - antigravity-build
+  workflow_dispatch:
+
+concurrency:
+  group: release-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PRIVATE_SOURCE_COMMIT: "27f2ae3cdfedc9006fc7a51b563409afcc73b735"
+
+jobs:
+  validate-and-build:
+    name: ShipdeHop Release CI Validation & iOS Compile
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Display Provenance Metadata
+        run: |
+          echo "=================================================="
+          echo "ShipdeHop Public Release CI"
+          echo "Private Source Commit: ${{ env.PRIVATE_SOURCE_COMMIT }}"
+          echo "=================================================="
+
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Flutter Dependencies (flutter pub get)
+        working-directory: mobile
+        run: flutter pub get
+
+      - name: Flutter Static Analysis (flutter analyze)
+        working-directory: mobile
+        run: flutter analyze
+
+      - name: Flutter Test Suite (flutter test --reporter expanded)
+        working-directory: mobile
+        run: |
+          set -o pipefail
+          flutter test --reporter expanded
+
+      - name: Backend Dependencies (npm ci)
+        working-directory: backend
+        run: npm ci
+
+      - name: Backend Build (npm run build)
+        working-directory: backend
+        run: npm run build
+
+      - name: ShipdeHop Backend Release Test Suites
+        working-directory: backend
+        run: npm test
+
+      - name: Unsigned iOS Release Compile
+        working-directory: mobile
+        run: flutter build ios --release --no-codesign

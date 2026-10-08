@@ -1,0 +1,40 @@
+name: shipdehop_mobile
+description: ShipdeHop P2P super-app mobile client.
+publish_to: none
+version: 1.0.1+4
+
+environment:
+  sdk: '>=3.12.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^3.4.2
+  flutter_stripe: ^14.0.0
+  geolocator: ^14.0.3
+  go_router: ^17.5.0
+  google_maps_flutter: ^2.18.0
+  http: ^1.6.0
+  image_picker: ^1.2.3
+  mobile_scanner: ^7.4.0
+  qr_flutter: ^4.1.0
+  razorpay_flutter: ^1.4.5
+  supabase_flutter: ^2.17.2
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  url_launcher: ^6.3.1
+  flutter_animate: ^4.5.2
+  cached_network_image: ^3.4.1
+  shared_preferences: ^2.5.3
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/mascot/
+
