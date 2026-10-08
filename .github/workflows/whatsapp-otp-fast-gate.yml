@@ -1,0 +1,52 @@
+name: WhatsApp OTP Fast Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/whatsapp-otp-fast-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Flutter dependencies
+        working-directory: mobile
+        run: flutter pub get
+      - name: Flutter analyze
+        working-directory: mobile
+        run: flutter analyze
+      - name: Flutter tests
+        working-directory: mobile
+        run: flutter test --reporter expanded
+      - name: Backend dependencies
+        working-directory: backend
+        run: npm ci
+      - name: Backend compile
+        working-directory: backend
+        run: npm run build
+      - name: Backend tests
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          SUPABASE_URL: https://placeholder.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: placeholder-publishable-key-for-tests
+          SUPABASE_SECRET_KEY: placeholder-secret-key-for-tests
+          GEMINI_API_KEY: placeholder-gemini-key-for-tests
+          PAYMENT_PROVIDER: DISABLED
+        run: npm test
