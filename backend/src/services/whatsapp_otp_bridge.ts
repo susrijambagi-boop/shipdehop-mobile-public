@@ -114,9 +114,16 @@ class WhatsAppOtpBridge {
 
   async start(): Promise<void> {
     if (this.connectPromise) return this.connectPromise;
-    this.connectPromise = this.connectInternal().finally(() => {
-      this.connectPromise = null;
-    });
+    this.connectPromise = this.connectInternal()
+      .catch((error: any) => {
+        this.status = 'DISCONNECTED';
+        this.lastError = error?.message || String(error);
+        this.socket = null;
+        this.scheduleReconnect(5000);
+      })
+      .finally(() => {
+        this.connectPromise = null;
+      });
     return this.connectPromise;
   }
 
@@ -244,8 +251,16 @@ class WhatsAppOtpBridge {
         if (!socket) throw new Error('WhatsApp bridge is disconnected.');
 
         const jid = `${digits}@s.whatsapp.net`;
+        const availability = await socket.onWhatsApp(jid);
+        if (!availability?.[0]?.exists) {
+          throw new Error('That number is not registered on WhatsApp.');
+        }
+
         const result = await socket.sendMessage(jid, { text: message });
         const messageId = result?.key?.id?.toString() || null;
+        if (!messageId) {
+          throw new Error('WhatsApp did not acknowledge the OTP message.');
+        }
 
         return { messageId, attempts: attempt };
       } catch (error) {
