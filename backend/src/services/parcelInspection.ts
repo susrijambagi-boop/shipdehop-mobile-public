@@ -7,6 +7,7 @@ export type ParcelInspection = {
   contentMismatch: boolean;
   prohibitedCategories: string[];
   rationale: string;
+  retryable?: boolean;
   timing?: {
     totalMs: number;
     loadMs?: number;
@@ -58,7 +59,7 @@ export function normalizeInspection(parsed: Partial<ParcelInspection>): ParcelIn
     ? parsed.rationale.slice(0, 2000)
     : 'Inspection completed.';
 
-  if (contentMismatch && decision === 'APPROVED') {
+  if ((contentMismatch || prohibitedCategories.length > 0) && decision === 'APPROVED') {
     decision = 'REVIEW';
   }
 
@@ -103,11 +104,12 @@ export async function inspectWithGemini(
     `Product URL context: ${input.productUrl ?? 'none'}`,
   ].join('\n');
 
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const ai = options?.aiClient ?? new GoogleGenAI({ apiKey: config.GEMINI_API_KEY });
 
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('HopShield Gemini inspection timed out')), timeoutMs);
+      timer = setTimeout(() => reject(new Error('HopShield Gemini inspection timed out')), timeoutMs);
     });
 
     const generatePromise = ai.models.generateContent({
@@ -149,11 +151,19 @@ export async function inspectWithGemini(
         confidence: 0,
         contentMismatch: false,
         prohibitedCategories: [],
-        rationale: 'AI output format unrecognized; flagged for manual review.',
+        rationale: 'Safety scan response could not be read. Please retry.',
+        retryable: true,
         timing: { totalMs: Date.now() - startTime },
       };
     }
 
+    if (!parsed || !['APPROVED','REVIEW','BLOCKED'].includes(String(parsed.decision)) ||
+        typeof parsed.confidence !== 'number' || !Number.isFinite(parsed.confidence) ||
+        parsed.confidence < 0 || parsed.confidence > 1 || typeof parsed.contentMismatch !== 'boolean' ||
+        !Array.isArray(parsed.prohibitedCategories) || !parsed.prohibitedCategories.every(v => typeof v === 'string') ||
+        typeof parsed.rationale !== 'string' || !parsed.rationale.trim()) {
+      throw new Error('Incomplete safety assessment');
+    }
     const normalized = normalizeInspection(parsed);
     normalized.timing = { totalMs: Date.now() - startTime };
     return normalized;
@@ -164,9 +174,12 @@ export async function inspectWithGemini(
       confidence: 0,
       contentMismatch: false,
       prohibitedCategories: [],
-      rationale: 'AI safety inspection service temporarily unavailable; queued for manual safety review.',
+      rationale: 'AI safety inspection service temporarily unavailable. Please retry.',
+      retryable: true,
       timing: { totalMs: Date.now() - startTime },
     };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
@@ -194,6 +207,7 @@ export async function inspectWithOllama(
 
   const response = await fetch(ollamaUrl, {
     method: 'POST',
+    signal: AbortSignal.timeout(15000),
     headers: {
       'Content-Type': 'application/json',
     },
@@ -255,5 +269,7 @@ export async function inspectParcel(input: ParcelInspectionInput): Promise<Parce
   if (config.PARCEL_INSPECTION_PROVIDER === 'GEMINI') {
     return inspectWithGemini(input);
   }
-  return inspectWithOllama(input);
+  try { return await inspectWithOllama(input); }
+  catch { return { decision: 'REVIEW', confidence: 0, contentMismatch: false,
+    prohibitedCategories: [], rationale: 'Safety inspection is temporarily unavailable. Please retry.', retryable: true }; }
 }
