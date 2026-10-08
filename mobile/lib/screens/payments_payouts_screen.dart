@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/app_providers.dart';
+import '../core/app_config.dart';
 import '../theme/shipdehop_colors.dart';
 import '../theme/shipdehop_typography.dart';
 import '../widgets/profile/profile_components.dart';
@@ -13,6 +14,36 @@ class PaymentsPayoutsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (AppConfig.paymentProvider == 'DISABLED') {
+      return const ProfileDetailScaffold(
+        title: 'Payments & payouts',
+        children: [
+          ProfileSectionTitle('How money works right now'),
+          SizedBox(height: 8),
+          ProfileInfoCard(
+            icon: Icons.handshake_outlined,
+            title: 'Agree and settle directly',
+            body:
+                'ShipdeHop does not collect, charge, hold, escrow, release, refund or pay out money in the current release. Buyers, senders, travellers, drivers and sellers agree the amount and payment method directly with each other and settle outside ShipdeHop.',
+          ),
+          SizedBox(height: 10),
+          ProfileInfoCard(
+            icon: Icons.shield_outlined,
+            title: 'Outside payments are not protected by ShipdeHop',
+            body:
+                'Matching, chat, route coordination, Trust Score and OTP/QR handoff confirmation do not guarantee or insure a payment made outside the app. Confirm the person, item, amount and handoff terms before paying.',
+          ),
+          SizedBox(height: 10),
+          ProfileInfoCard(
+            icon: Icons.account_balance_wallet_outlined,
+            title: 'No payout account is required',
+            body:
+                'ShipdeHop does not ask you to connect a card or payout account while in-app money movement is disabled. If you choose to pay outside ShipdeHop, use a payment method you trust and handle any refund or payment dispute through that method and the counterparty.',
+          ),
+        ],
+      );
+    }
+
     final ordersAsync = ref.watch(userOrdersProvider);
     final userId = ref.watch(authUserProvider).value?.id ?? '';
     final rawAccounts = profile['paymentAccounts'];
@@ -21,12 +52,13 @@ class PaymentsPayoutsScreen extends ConsumerWidget {
     return ProfileDetailScaffold(
       title: 'Payments & payouts',
       children: [
-        const ProfileSectionTitle('HopPay (Beta)'),
+        const ProfileSectionTitle('Payments'),
         const SizedBox(height: 8),
         const ProfileInfoCard(
           icon: Icons.info_outline_rounded,
-          title: 'Payments & payouts — Coming soon',
-          body: 'Payment processing, payouts, and card collection are currently disabled in this beta release. No payment methods are charged.',
+          title: 'Payment activity',
+          body:
+              'This screen reflects the payment provider configured for this build. Payment status should be treated as provider-backed only when the configured payment flow completes successfully.',
         ),
         const SizedBox(height: 12),
         _PayoutAccountCard(accounts: accounts),
