@@ -50,7 +50,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
     try {
       final status = await ref
           .read(apiClientProvider)
-          .get('/auth/phone/status/' + pending, requireAuth: false);
+          .get('/auth/phone/status/$pending', requireAuth: false);
 
       final currentStatus = status['status']?.toString();
       if (currentStatus == 'PHONE_VERIFIED') {
@@ -74,10 +74,10 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
   String _normalizeE164(String raw) {
     var clean = raw.trim().replaceAll(RegExp(r'[\\s\\-\\(\\)\\.]'), '');
     if (clean.startsWith('+')) return clean;
-    if (clean.startsWith('0091')) return '+91' + clean.substring(4);
-    if (clean.startsWith('91') && clean.length == 12) return '+' + clean;
+    if (clean.startsWith('0091')) return '+91${clean.substring(4)}';
+    if (clean.startsWith('91') && clean.length == 12) return '+$clean';
     if (clean.startsWith('0')) clean = clean.substring(1);
-    return selectedCountryCode + clean;
+    return '$selectedCountryCode$clean';
   }
 
   bool _isValidIndiaPhone(String value) {
@@ -116,7 +116,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
         otpController.clear();
       });
       _startResendCountdown();
-      _message('OTP sent to WhatsApp on ' + _maskedPhone(phoneE164 ?? normalized) + '.');
+      _message('OTP sent to WhatsApp on ${_maskedPhone(phoneE164 ?? normalized)}.');
     } on ApiException catch (e) {
       _message(e.message);
     } catch (_) {
@@ -222,7 +222,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
 
   String _maskedPhone(String value) {
     if (value.length <= 6) return value;
-    return value.substring(0, 3) + '******' + value.substring(value.length - 3);
+    return '${value.substring(0, 3)}******${value.substring(value.length - 3)}';
   }
 
   void _message(String text) {
@@ -387,7 +387,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                       onPressed: isBusy || resendSeconds > 0 ? null : _sendOtp,
                       child: Text(
                         resendSeconds > 0
-                            ? 'Resend OTP in ' + resendSeconds.toString() + 's'
+                            ? 'Resend OTP in ${resendSeconds}s'
                             : 'Resend WhatsApp OTP',
                       ),
                     ),
