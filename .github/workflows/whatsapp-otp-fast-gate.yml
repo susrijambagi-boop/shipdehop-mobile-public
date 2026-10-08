@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/whatsapp-otp-fast-gate.yml'
+      - 'backend/**'
+      - 'mobile/**'
+      - 'PRIVATE_RELEASE_SHA'
   workflow_dispatch:
 
 permissions:
