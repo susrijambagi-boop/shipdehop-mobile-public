@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/refresh-lockfile.yml'
+      - 'backend/package.json'
   workflow_dispatch:
 
 permissions:
@@ -21,7 +22,7 @@ jobs:
       - name: Add WhatsApp bridge dependencies
         working-directory: backend
         run: |
-          npm install --save-exact @whiskeysockets/baileys@6.7.18 pino@9.10.0
+          npm install --save-exact @whiskeysockets/baileys@6.7.22 pino@9.10.0
       - name: Commit lockfile
         run: |
           git config user.name "shipdehop-ci"
