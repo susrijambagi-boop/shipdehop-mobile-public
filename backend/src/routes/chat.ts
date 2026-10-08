@@ -179,12 +179,22 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     const { orderId } = z.object({ orderId: z.string().uuid() }).parse(request.params);
     const userId = request.authUser.id;
 
-    const { data: order } = await adminSupabase.from('escrow_orders').select('id, buyer_id, provider_id').eq('id', orderId).single();
+    const { data: order } = await adminSupabase
+      .from('escrow_orders')
+      .select('id, buyer_id, provider_id')
+      .eq('id', orderId)
+      .single();
+
     if (!order || (order.buyer_id !== userId && order.provider_id !== userId)) {
       throw app.httpErrors.forbidden('Access denied to order thread');
     }
 
-    let { data: thread } = await adminSupabase.from('chat_threads').select('*').eq('order_id', orderId).single();
+    let { data: thread } = await adminSupabase
+      .from('chat_threads')
+      .select('*')
+      .eq('order_id', orderId)
+      .single();
+
     if (!thread) {
       const { data: newThread, error: createErr } = await adminSupabase
         .from('chat_threads')
@@ -196,7 +206,23 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
       thread = newThread;
     }
 
-    return { thread };
+    const isBuyer = order.buyer_id === userId;
+    const counterpartyId = isBuyer ? order.provider_id : order.buyer_id;
+
+    const { data: counterpartyUser } = await adminSupabase
+      .from('users')
+      .select('id, full_name, avatar_url')
+      .eq('id', counterpartyId)
+      .maybeSingle();
+
+    return {
+      thread,
+      counterparty: {
+        id: counterpartyId,
+        fullName: counterpartyUser?.full_name ?? (isBuyer ? 'Traveller' : 'Sender'),
+        avatarUrl: counterpartyUser?.avatar_url ?? null,
+      },
+    };
   });
 
   // 5. Global Unread Messages Count across all threads
