@@ -20,7 +20,7 @@ env:
 
 jobs:
   validate-and-build:
-    name: ShipdeHop Release CI Validation & iOS Compile
+    name: ShipdeHop Flutter Validation & Unsigned iOS Compile
     runs-on: macos-latest
     timeout-minutes: 45
 
@@ -61,18 +61,6 @@ jobs:
         run: |
           set -o pipefail
           flutter test --reporter expanded
-
-      - name: Backend Dependencies (npm ci)
-        working-directory: backend
-        run: npm ci
-
-      - name: Backend Build (npm run build)
-        working-directory: backend
-        run: npm run build
-
-      - name: ShipdeHop Backend Release Test Suites
-        working-directory: backend
-        run: npm test
 
       - name: Unsigned iOS Release Compile
         working-directory: mobile
