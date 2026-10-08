@@ -6,6 +6,7 @@ import { adminSupabase } from '../lib/supabase.js';
 import { assertIndiaRoute, INDIA_ONLY_MESSAGE } from '../lib/launchMarket.js';
 import { requireVerifiedIdentity } from './identity.js';
 import { verifyIndiaLocation, verifyRoadRouteInIndia, normalizeCountryCode } from '../lib/locationValidation.js';
+import { findCarpoolParcelAlternatives } from '../services/carpoolAlternatives.js';
 
 const point = z.object({
   lat: z.number().min(-90).max(90),
@@ -200,6 +201,55 @@ export async function tripRoutes(app: FastifyInstance): Promise<void> {
     });
     if (error) throw app.httpErrors.badRequest(error.message);
     return data;
+  });
+
+  app.get('/trips/parcel-alternatives', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!request.authUser?.id) {
+      return reply.code(401).send({ message: 'Sign in to search parcel alternatives.' });
+    }
+    const q = z.object({
+      originLat: z.coerce.number().min(-90).max(90),
+      originLon: z.coerce.number().min(-180).max(180),
+      destLat: z.coerce.number().min(-90).max(90),
+      destLon: z.coerce.number().min(-180).max(180),
+      travelDate: z.string().datetime(),
+      maxDetourMeters: z.coerce.number().int().min(1000).max(50000).default(5000),
+      limit: z.coerce.number().int().min(1).max(10).default(5),
+    }).parse(request.query);
+
+    for (const [label, point] of [
+      ['Search origin', { lat: q.originLat, lon: q.originLon }],
+      ['Search destination', { lat: q.destLat, lon: q.destLon }],
+    ] as const) {
+      const checked = await verifyIndiaLocation(point);
+      if (!checked.isValid) {
+        if (checked.status === 'SERVICE_UNAVAILABLE') {
+          throw app.httpErrors.serviceUnavailable(
+            checked.errorMessage || "We couldn't verify this location. Please try again.",
+          );
+        }
+        throw app.httpErrors.badRequest(
+          `${label} location error: ${checked.errorMessage || 'Currently available in India.'}`,
+        );
+      }
+    }
+
+    try {
+      return await findCarpoolParcelAlternatives(adminSupabase as any, {
+        actorId: request.authUser.id,
+        originLat: q.originLat,
+        originLon: q.originLon,
+        destLat: q.destLat,
+        destLon: q.destLon,
+        travelDate: q.travelDate,
+        maxDetourMeters: q.maxDetourMeters,
+        limit: q.limit,
+      });
+    } catch {
+      throw app.httpErrors.serviceUnavailable(
+        'Could not check parcel alternatives right now. Please retry.',
+      );
+    }
   });
 
   app.get(
