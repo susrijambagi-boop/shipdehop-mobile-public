@@ -353,7 +353,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ? 'Checking pending requests…'
                         : adminPendingCount == 0
                             ? 'No pending requests'
-                            : adminPendingCount.toString() + ' pending request' + (adminPendingCount == 1 ? '' : 's'),
+                            : '$adminPendingCount pending request${adminPendingCount == 1 ? '' : 's'}',
                     onTap: () async {
                       await Navigator.push<void>(
                         context,
