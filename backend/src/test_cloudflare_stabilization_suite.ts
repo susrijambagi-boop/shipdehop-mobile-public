@@ -8,18 +8,17 @@ import { getGeoapifyCache, setGeoapifyCache } from './services/geoapifyCache.js'
 
 console.log('=== CLOUDFLARE STABILIZATION SUITE ===');
 
-async function testWhatsAppWebhookBlockedUnderManualBeta() {
-  console.log('\n--- 1. MANUAL_BETA WhatsApp Webhook Security Test ---');
+async function testLegacyWhatsAppWebhookIsRemoved() {
+  console.log('\n--- 1. Legacy WhatsApp Webhook Removal Test ---');
   const app = fastify();
   await app.register(sensible);
   await app.register(phoneVerificationRoutes);
 
-  // Assert PHONE_VERIFICATION_PROVIDER is MANUAL_BETA or development
   const responseGet = await app.inject({
     method: 'GET',
     url: '/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=shipdehop_wa_verify_token&hub.challenge=12345',
   });
-  assert.equal(responseGet.statusCode, 403, 'GET /webhooks/whatsapp must return 403 under MANUAL_BETA');
+  assert.equal(responseGet.statusCode, 404, 'Legacy GET /webhooks/whatsapp must not exist under outbound OTP auth');
 
   const responsePost = await app.inject({
     method: 'POST',
@@ -34,8 +33,8 @@ async function testWhatsAppWebhookBlockedUnderManualBeta() {
       }],
     },
   });
-  assert.equal(responsePost.statusCode, 403, 'POST /webhooks/whatsapp forged webhook must return 403 under MANUAL_BETA');
-  console.log('  ✓ WhatsApp webhooks correctly return HTTP 403 under MANUAL_BETA mode');
+  assert.equal(responsePost.statusCode, 404, 'Legacy POST /webhooks/whatsapp must not exist under outbound OTP auth');
+  console.log('  ✓ Legacy inbound WhatsApp webhooks are absent under outbound OTP auth');
 }
 
 async function testGeoapifyCacheKeySafety() {
@@ -63,7 +62,7 @@ async function testRouteRegistration() {
 }
 
 async function runAll() {
-  await testWhatsAppWebhookBlockedUnderManualBeta();
+  await testLegacyWhatsAppWebhookIsRemoved();
   await testGeoapifyCacheKeySafety();
   await testRouteRegistration();
   console.log('\n🎉 ALL CLOUDFLARE STABILIZATION SUITE TESTS PASSED!\n');
