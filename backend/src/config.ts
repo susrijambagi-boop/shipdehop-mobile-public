@@ -4,10 +4,10 @@ import { z } from 'zod';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(8080),
-  SUPABASE_URL: z.string().url().default('https://placeholder.supabase.co'),
-  SUPABASE_PUBLISHABLE_KEY: z.string().min(10).default('placeholder-publishable-key-for-tests'),
-  SUPABASE_SECRET_KEY: z.string().min(10).default('placeholder-secret-key-for-tests'),
-  GEMINI_API_KEY: z.string().min(1).default('placeholder-gemini-key-for-tests'),
+  SUPABASE_URL: z.string().url(),
+  SUPABASE_PUBLISHABLE_KEY: z.string().min(10),
+  SUPABASE_SECRET_KEY: z.string().min(10),
+  GEMINI_API_KEY: z.string().min(1),
   GEOAPIFY_API_KEY: z.string().optional(),
   GOOGLE_ROUTES_API_KEY: z.string().optional(),
   GOOGLE_GEOCODING_API_KEY: z.string().optional(),
@@ -28,7 +28,8 @@ const envSchema = z.object({
   PLATFORM_FEE_BPS_MARKETPLACE: z.coerce.number().int().min(0).max(3000).default(600),
   PLATFORM_FEE_BPS_SHIPMENT: z.coerce.number().int().min(0).max(3000).default(1000),
   DEV_TEST_AUTH: z.string().optional().transform(v => v === 'true'),
-  PHONE_VERIFICATION_PROVIDER: z.enum(['WHATSAPP_INBOUND', 'DEVELOPMENT', 'MANUAL_BETA']).optional(),
+  STARTUP_DEPENDENCY_PROBE: z.string().optional().transform(v => v === 'true').default(false),
+  PHONE_VERIFICATION_PROVIDER: z.enum(['WHATSAPP_OUTBOUND', 'WHATSAPP_INBOUND', 'DEVELOPMENT', 'MANUAL_BETA']).optional(),
   PHONE_VERIFICATION_ENABLED: z.string().optional().transform(v => v === 'true').default(false),
   WHATSAPP_BOT_NUMBER: z.string().optional(),
   WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().default('shipdehop_wa_verify_token'),
@@ -61,7 +62,7 @@ const envSchema = z.object({
     (data.NODE_ENV === 'production' ? 'GEMINI' : 'OLLAMA'),
   PHONE_VERIFICATION_PROVIDER:
     data.PHONE_VERIFICATION_PROVIDER ??
-    (data.NODE_ENV === 'production' ? 'MANUAL_BETA' : 'DEVELOPMENT'),
+    (data.NODE_ENV === 'production' ? 'WHATSAPP_OUTBOUND' : 'DEVELOPMENT'),
 })).refine(data => {
   if (data.NODE_ENV === 'production') {
     if (data.DEV_TEST_AUTH === true) {
