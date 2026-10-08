@@ -4,7 +4,7 @@
 > This document is generated from that file for human reference.
 > When in doubt, the JSON file wins.
 
-## Canonical migration order (20 files)
+## Canonical migration order (23 files)
 
 Apply migrations in **exactly** this order for both a fresh install and an incremental upgrade.
 
@@ -30,6 +30,9 @@ Apply migrations in **exactly** this order for both a fresh install and an incre
 | 18 | `014_production_security_hardening.sql` | Production security hardening for verification sessions |
 | 19 | `015_cloudflare_route_validation_rpc.sql` | GeoJSON LineString route validation RPC for Cloudflare Workers |
 | 20 | `016_cloudflare_coord_validation_rpc.sql` | Service-role-only float64 coordinate validation RPC for Cloudflare Workers |
+| 21 | `017_assistant_parcel_timing.sql` | Parcel timing fields and assistant matching support |
+| 22 | `018_identity_admin_review_queue.sql` | Admin identity review queue, RLS and audited approval RPC |
+| 23 | `019_whatsapp_otp_bridge.sql` | Server-only WhatsApp linked-device state and OTP delivery metadata |
 
 ## Rules
 
@@ -38,7 +41,7 @@ Apply migrations in **exactly** this order for both a fresh install and an incre
 - Migrations 001–004 are already applied on production. Do not re-run them there.
 - All constraints in 013 use `NOT VALID` for safe incremental deployment.
 - The automated test in `backend/src/test_migration_order_suite.ts` enforces that:
-  - all 20 files exist on disk
+  - all 23 files exist on disk
   - no unlisted `.sql` files are present in `db/`
   - a fresh-install PGlite run applies all 20 migrations successfully
   - a pre-013 → 013 upgrade run succeeds without corrupting legacy data
