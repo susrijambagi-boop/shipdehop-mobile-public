@@ -11,7 +11,7 @@ import 'package:shipdehop_mobile/core/session_manager.dart';
 import 'package:shipdehop_mobile/main.dart';
 import 'package:shipdehop_mobile/providers/app_providers.dart';
 import 'package:shipdehop_mobile/screens/main_home_screen.dart';
-import 'package:shipdehop_mobile/screens/sign_in_screen.dart';
+import 'package:shipdehop_mobile/screens/phone_auth_screen.dart';
 import 'package:shipdehop_mobile/screens/identity_verification_screen.dart';
 import 'package:shipdehop_mobile/widgets/identity_badge.dart';
 
@@ -50,13 +50,13 @@ void main() {
       expect(find.byIcon(Icons.hourglass_top_rounded), findsOneWidget);
     });
 
-    test('Release entry route uses email SignInScreen instead of unconfigured WhatsApp auth', () {
+    test('Release entry route uses WhatsApp OTP PhoneAuthScreen', () {
       const state = AppAuthState(isBootstrapping: false);
       final home = resolveShipdeHopHome(state);
-      expect(home, isA<SignInScreen>());
+      expect(home, isA<PhoneAuthScreen>());
     });
 
-    testWidgets('IdentityVerificationScreen renders truthful Online Aadhaar OTP step', (tester) async {
+    testWidgets('IdentityVerificationScreen does not expose dormant Aadhaar OTP flow', (tester) async {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(
@@ -65,10 +65,11 @@ void main() {
         ),
       );
 
-      expect(find.text('Verify your identity'), findsWidgets);
-      expect(find.text('🔒 Privacy & Security Guarantees'), findsOneWidget);
-      expect(find.textContaining('I consent to Aadhaar e-KYC verification'), findsOneWidget);
-      expect(find.text('Send Aadhaar OTP'), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(find.text('Identity verification'), findsOneWidget);
+      expect(find.text('Online Aadhaar verification is not active'), findsOneWidget);
+      expect(find.text('Send Aadhaar OTP'), findsNothing);
+      expect(find.textContaining('Do not enter your Aadhaar number'), findsOneWidget);
     });
 
     test('SessionManager holds in-memory access token without storing refresh token in client state', () {
@@ -100,8 +101,9 @@ void main() {
           return http.Response(
             jsonEncode({
               'sessionId': 'test-session-uuid',
-              'challenge': 'VERIFY SHIPDEHOP ABC123',
-              'whatsappUrl': 'https://wa.me/15550009427?text=VERIFY%20SHIPDEHOP%20ABC123',
+              'phoneE164': '+919876543210',
+              'expiresAt': '2026-10-08T07:15:00.000Z',
+              'deliveryStatus': 'SENT',
             }),
             200,
             headers: {'content-type': 'application/json'},
@@ -125,7 +127,8 @@ void main() {
       );
 
       expect(result['sessionId'], 'test-session-uuid');
-      expect(result['challenge'], 'VERIFY SHIPDEHOP ABC123');
+      expect(result['deliveryStatus'], 'SENT');
+      expect(result.containsKey('challenge'), isFalse);
     });
 
     test('ApiClient strictly rejects protected route with 401 when unauthenticated and requireAuth: true', () async {
@@ -227,8 +230,8 @@ void main() {
           ),
         );
 
-        expect(find.text('Verify your identity'), findsWidgets);
-        expect(find.text('Send Aadhaar OTP'), findsOneWidget);
+        expect(find.text('Identity verification'), findsOneWidget);
+        expect(find.text('Send Aadhaar OTP'), findsNothing);
         expect(tester.takeException(), isNull);
       });
     }
