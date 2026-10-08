@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PRIVATE_SOURCE_COMMIT: "27f2ae3cdfedc9006fc7a51b563409afcc73b735"
+  PRIVATE_SOURCE_COMMIT: "17b2da2296fb8a4cb18294a6856c8cf14fd61d83"
 
 jobs:
   validate-and-build:
