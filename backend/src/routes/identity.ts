@@ -40,7 +40,7 @@ export async function requireVerifiedIdentity(request: FastifyRequest, reply: Fa
   if (!identity || identity.verificationStatus !== 'VERIFIED') {
     reply.code(403).send({
       error: 'IDENTITY_VERIFICATION_REQUIRED',
-      message: 'Government identity and biometric verification is required before performing this transaction.',
+      message: 'Identity verification is required before performing this transaction.',
       status: identity?.verificationStatus || 'NOT_STARTED',
     });
     return false;
