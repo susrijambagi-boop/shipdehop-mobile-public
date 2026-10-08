@@ -1,5 +1,9 @@
 name: WhatsApp OTP Fast Gate
 
+concurrency:
+  group: whatsapp-otp-fast
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
