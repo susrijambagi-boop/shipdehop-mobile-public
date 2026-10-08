@@ -20,7 +20,7 @@
     "pg": "^8.23.0",
     "stripe": "^18.5.0",
     "zod": "^4.1.11",
-    "@whiskeysockets/baileys": "6.7.18",
+    "@whiskeysockets/baileys": "6.7.22",
     "pino": "9.10.0"
   },
   "devDependencies": {
