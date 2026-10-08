@@ -128,7 +128,7 @@ async function newDb(): Promise<PGlite> {
 async function testManifestIntegrity(): Promise<void> {
   console.log('\n--- A. Manifest integrity ---');
 
-  assert.equal(CANONICAL_LIST.length, 22, `Expected 22 canonical migrations, got ${CANONICAL_LIST.length}`);
+  assert.equal(CANONICAL_LIST.length, 23, `Expected 23 canonical migrations, got ${CANONICAL_LIST.length}`);
   assert.equal(new Set(CANONICAL_LIST).size, CANONICAL_LIST.length, 'Canonical migrations must not contain duplicates');
   console.log(`  ✓ Canonical count = ${CANONICAL_LIST.length}`);
 
