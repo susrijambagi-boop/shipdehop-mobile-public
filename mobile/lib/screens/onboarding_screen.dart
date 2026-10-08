@@ -3,7 +3,7 @@ import '../theme/shipdehop_colors.dart';
 import '../widgets/mascot/shipdehop_mascot.dart';
 import '../widgets/mascot/mascot_pose.dart';
 import '../widgets/mascot/mascot_motion.dart';
-import 'sign_in_screen.dart';
+import 'phone_auth_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback? onComplete;
@@ -47,7 +47,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     ),
     _OnboardingPageData(
       headline: 'Every hop, protected',
-      sub: 'HopShield + HopPay help keep your journey and payments safer.',
+      sub: 'Pickup and handoff checks help people coordinate each hop more safely.',
       pose: MascotPose.celebrate,
       motion: MascotMotion.celebrateOnce,
     ),
@@ -58,7 +58,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       widget.onComplete!();
     } else {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(builder: (_) => const SignInScreen()),
+        MaterialPageRoute<void>(builder: (_) => const PhoneAuthScreen()),
       );
     }
   }
