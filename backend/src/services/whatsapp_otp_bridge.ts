@@ -99,13 +99,14 @@ class WhatsAppOtpBridge {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private pairingCode: string | null = null;
   private pairingPhone: string | null = null;
+  private authCreds: any | null = null;
 
   getStatus() {
     return {
       status: this.status,
       connected: this.status === 'CONNECTED',
-      paired: Boolean(this.socket?.authState?.creds?.registered),
-      senderJid: this.socket?.authState?.creds?.me?.id || null,
+      paired: Boolean(this.authCreds?.registered),
+      senderJid: this.authCreds?.me?.id || null,
       lastError: this.lastError,
       pairingCode: this.pairingCode,
       pairingPhone: this.pairingPhone,
@@ -140,6 +141,7 @@ class WhatsAppOtpBridge {
     this.lastError = null;
 
     const { state, saveCreds } = await makeDatabaseAuthState();
+    this.authCreds = state.creds;
 
     const socket = makeWASocket({
       auth: state as any,
@@ -173,7 +175,7 @@ class WhatsAppOtpBridge {
         return;
       }
 
-      if (qr && !socket.authState?.creds?.registered) {
+      if (qr && !this.authCreds?.registered) {
         this.status = 'PAIRING';
       }
 
@@ -196,7 +198,7 @@ class WhatsAppOtpBridge {
     });
 
     await new Promise((resolve) => setTimeout(resolve, 1200));
-    if (socket.authState?.creds?.registered) {
+    if (this.authCreds?.registered) {
       this.status = 'CONNECTING';
     } else {
       this.status = 'PAIRING';
@@ -212,7 +214,7 @@ class WhatsAppOtpBridge {
     await this.start();
     const socket = this.socket;
     if (!socket) throw new Error('WhatsApp bridge is not ready yet.');
-    if (socket.authState?.creds?.registered) {
+    if (this.authCreds?.registered) {
       throw new Error('WhatsApp sender is already paired.');
     }
 
