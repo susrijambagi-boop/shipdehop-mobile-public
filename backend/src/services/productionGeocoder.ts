@@ -1,6 +1,7 @@
 import { verifyIndiaLocation, validateIndianPinCode } from '../lib/locationValidation.js';
 import { config } from '../config.js';
 import { getGeoapifyCache, setGeoapifyCache } from './geoapifyCache.js';
+import { LocationSearchUnavailable, searchIndiaPlaceProvider } from './indiaPlaceSearch.js';
 
 export interface GeocodingResult {
   displayLabel: string;
@@ -34,46 +35,37 @@ export async function searchGeocodingProvider(query: string): Promise<GeocodingR
   const queryTrimmed = query.trim();
   if (!queryTrimmed) return [];
 
-  const cacheKey = `https://cache.shipdehop.internal/geoapify/search?q=${encodeURIComponent(queryTrimmed.toLowerCase())}`;
+  // Version the cache so earlier city-only answers do not hide landmark fixes.
+  const cacheKey = `https://cache.shipdehop.internal/geoapify/autocomplete-v2?q=${encodeURIComponent(queryTrimmed.toLowerCase())}`;
   const cached = await getGeoapifyCache<GeocodingResult[]>(cacheKey);
-  if (cached && cached.length > 0) return cached;
+  if (cached) return cached;
 
   const apiKey = getGeoapifyApiKey();
   const isProduction = process.env.NODE_ENV === 'production';
 
   if (apiKey && apiKey !== 'mock-key-for-tests') {
-    try {
-      const url = `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(queryTrimmed)}&filter=countrycode:in&format=json&limit=10&apiKey=${apiKey}`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = (await res.json()) as any;
-        if (Array.isArray(data.results)) {
-          const parsed = parseGeoapifyResults(data.results);
-          if (parsed.length > 0) {
-            await setGeoapifyCache(cacheKey, parsed, 86400); // Cache 24h
-            return parsed;
-          }
-        }
-      }
-    } catch (_) {
-      if (isProduction) return [];
-    }
+    const parsed = parseGeoapifyResults(await searchIndiaPlaceProvider(queryTrimmed, apiKey));
+    if (parsed.length > 0) await setGeoapifyCache(cacheKey, parsed, 86400);
+    return parsed;
   }
 
   if (isProduction) {
-    return [];
+    const fallback = await searchNominatimIndia(queryTrimmed);
+    if (fallback.length > 0) {
+      await setGeoapifyCache(cacheKey, fallback, 86400);
+      return fallback;
+    }
+    throw new LocationSearchUnavailable();
   }
 
-  // Curated landmark matching for offline/dev/test execution only
+  // Curated landmark matching for offline/dev/test execution only.
   const queryLower = queryTrimmed.toLowerCase();
-  const matches = CURATED_INDIA_LANDMARKS.filter(
+  return CURATED_INDIA_LANDMARKS.filter(
     (l) =>
       l.displayLabel.toLowerCase().includes(queryLower) ||
       l.formattedAddress.toLowerCase().includes(queryLower) ||
       l.locality.toLowerCase().includes(queryLower)
   );
-
-  return matches;
 }
 
 export async function reverseGeocodeProvider(
@@ -115,6 +107,11 @@ export async function reverseGeocodeProvider(
   }
 
   if (isProduction) {
+    const fallback = await reverseNominatimIndia(lat, lon);
+    if (fallback) {
+      await setGeoapifyCache(cacheKey, fallback, 604800);
+      return fallback;
+    }
     return null;
   }
 
@@ -183,4 +180,90 @@ function parseGeoapifyResults(results: any[]): GeocodingResult[] {
   }
 
   return parsed;
+}
+
+
+async function searchNominatimIndia(query: string): Promise<GeocodingResult[]> {
+  try {
+    const params = new URLSearchParams({
+      q: query,
+      format: 'jsonv2',
+      addressdetails: '1',
+      countrycodes: 'in',
+      limit: '8',
+    });
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+      headers: {
+        'User-Agent': 'ShipdeHop/1.0 (+https://shipdehop.com)',
+        'Accept-Language': 'en-IN,en;q=0.9',
+      },
+    });
+    if (!res.ok) return [];
+    const data = await res.json() as any[];
+    if (!Array.isArray(data)) return [];
+    return data.map(parseNominatimResult).filter((v): v is GeocodingResult => v !== null);
+  } catch (_) {
+    return [];
+  }
+}
+
+async function reverseNominatimIndia(lat: number, lon: number): Promise<GeocodingResult | null> {
+  try {
+    const params = new URLSearchParams({
+      lat: String(lat),
+      lon: String(lon),
+      format: 'jsonv2',
+      addressdetails: '1',
+      zoom: '18',
+    });
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?${params.toString()}`, {
+      headers: {
+        'User-Agent': 'ShipdeHop/1.0 (+https://shipdehop.com)',
+        'Accept-Language': 'en-IN,en;q=0.9',
+      },
+    });
+    if (!res.ok) return null;
+    return parseNominatimResult(await res.json());
+  } catch (_) {
+    return null;
+  }
+}
+
+function parseNominatimResult(item: any): GeocodingResult | null {
+  const address = item?.address ?? {};
+  const countryCode = String(address.country_code ?? '').toUpperCase();
+  if (countryCode !== 'IN') return null;
+
+  const latitude = Number.parseFloat(String(item?.lat ?? ''));
+  const longitude = Number.parseFloat(String(item?.lon ?? ''));
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+  const formattedAddress = String(item?.display_name ?? '').trim() ||
+    `${latitude}, ${longitude}, India`;
+  const locality = String(
+    address.city ?? address.town ?? address.village ?? address.municipality ??
+    address.county ?? address.state ?? 'India'
+  ).trim();
+  const state = String(address.state ?? 'India').trim();
+  const displayLabel = String(
+    item?.name ?? address.road ?? address.suburb ?? address.neighbourhood ??
+    address.city ?? address.town ?? address.village ?? formattedAddress.split(',')[0] ?? 'Location'
+  ).trim();
+
+  const result: GeocodingResult = {
+    displayLabel,
+    formattedAddress,
+    latitude,
+    longitude,
+    countryCode: 'IN',
+    countryName: String(address.country ?? 'India'),
+    state,
+    locality,
+    provenance: 'nominatim',
+  };
+
+  if (address.postcode && validateIndianPinCode(String(address.postcode))) {
+    result.postalCode = String(address.postcode).trim();
+  }
+  return result;
 }
