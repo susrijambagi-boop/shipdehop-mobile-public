@@ -20,6 +20,9 @@
     "013_release_closeout_hardening.sql",
     "014_production_security_hardening.sql",
     "015_cloudflare_route_validation_rpc.sql",
-    "016_cloudflare_coord_validation_rpc.sql"
+    "016_cloudflare_coord_validation_rpc.sql",
+    "017_assistant_parcel_timing.sql",
+    "018_identity_admin_review_queue.sql",
+    "019_whatsapp_otp_bridge.sql"
   ]
 }
