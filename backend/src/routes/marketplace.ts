@@ -169,6 +169,12 @@ export async function marketplaceRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/marketplace/purchases', async (request) => {
+    const paymentProvider = (process.env.PAYMENT_PROVIDER ?? 'DISABLED').trim().toUpperCase();
+    if (paymentProvider === 'DISABLED') {
+      throw app.httpErrors.serviceUnavailable(
+        'In-app marketplace checkout is not available in the current release. Browsing and listings remain available.',
+      );
+    }
     const body = z
       .object({
         itemId: z.string().uuid(),
