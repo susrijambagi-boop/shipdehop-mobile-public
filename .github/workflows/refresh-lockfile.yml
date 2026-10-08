@@ -1,6 +1,10 @@
 name: Refresh backend lockfile
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/refresh-lockfile.yml'
   workflow_dispatch:
 
 permissions:
