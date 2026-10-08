@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { shipmentDraftSchema, shipmentDraftRecord } from './routes/shipmentDrafts.js';
 import { PGlite } from '@electric-sql/pglite';
 import { postgis } from '@electric-sql/pglite-postgis';
 import fs from 'fs';
@@ -927,6 +928,31 @@ async function runRealPostGISDatabaseEnforcementSuite() {
   const notification = await db.query(`SELECT count(*)::int AS count FROM public.notifications WHERE user_id = '${buyerId}' AND type = 'RIDE_MATCHED' AND ride_request_id = '${requestId}'`);
   assert.equal((notification.rows[0] as any).count, 1);
   console.log('✅ Buyer impersonation rejected without stock changes; ride match notification delivered once.');
+
+  // Batch 3B: execute the exact new server draft record through PostgreSQL,
+  // including PostGIS EWKT conversion, database constraints and primary-key replay.
+  const draftInput = shipmentDraftSchema.parse({requestId:'faed290a-2010-4400-8000-000000000001',
+    itemType:'PARCEL',declaredValue:15000,rewardAmount:500,weightKg:5,currency:'INR',
+    pickupName:'Bengaluru',pickup:{lat:12.9716,lon:77.5946},
+    dropName:'Hubballi',drop:{lat:15.3647,lon:75.124},
+    earliestPickup:'2040-01-02T08:00:00+05:30',latestDelivery:'2040-01-03T22:00:00+05:30'});
+  const draftRecord = shipmentDraftRecord(sellerId, draftInput);
+  const insertDraft = async (record: typeof draftRecord) => {
+    const columns = Object.keys(record);
+    return db.query(`INSERT INTO public.shipment_tasks (${columns.join(',')}) VALUES (${columns.map((_,i)=>'$'+(i+1)).join(',')}) RETURNING id,status,inspection_status,weight_kg,ST_X(pickup_geo::geometry) AS lon`, Object.values(record));
+  };
+  const persisted = await insertDraft(draftRecord);
+  assert.equal((persisted.rows[0] as any).status,'DRAFT');
+  assert.equal((persisted.rows[0] as any).inspection_status,'PENDING');
+  assert.equal(Number((persisted.rows[0] as any).weight_kg),5);
+  assert.equal(Number((persisted.rows[0] as any).lon),77.5946);
+  await assert.rejects(()=>insertDraft(draftRecord),/duplicate key/);
+  const draftCount = await db.query(`SELECT count(*)::int AS count FROM public.shipment_tasks WHERE id=$1`,[draftRecord.id]);
+  assert.equal((draftCount.rows[0] as any).count,1);
+  const invalidRecord={...draftRecord,id:'faed290a-2010-4400-8000-000000000002',pickup_geo:'SRID=4326;POINT(51.531 25.2854)'};
+  await assert.rejects(()=>insertDraft(invalidRecord),/India|india|IN/);
+  await assert.rejects(()=>runAsUser(unrelatedId,()=>insertDraft({...draftRecord,id:'faed290a-2010-4400-8000-000000000003'})),/permission denied/);
+  console.log('PASS Batch3B real PostGIS draft insert, 15000/500/5 values, unique retry key, India trigger and revoked client insert grants.');
 
   // TEST SCENARIO B: FRESH INSTALLATION MIGRATION SUITE (001 TO 009)
   // ===========================================================================
