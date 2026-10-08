@@ -18,6 +18,7 @@ export async function historyRoutes(app: FastifyInstance): Promise<void> {
       .from('escrow_orders')
       .select('*')
       .or(`buyer_id.eq.${userId},provider_id.eq.${userId}`)
+      .eq('currency', 'INR')
       .order('created_at', { ascending: false })
       .range(query.offset, query.offset + query.limit - 1);
 
