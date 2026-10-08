@@ -104,10 +104,10 @@ void main() {
       expect(find.text('450'), findsOneWidget);
 
       // Payments disabled copy
-      expect(find.text('Coming soon in beta'), findsOneWidget);
+      expect(find.text('In-app payments not enabled'), findsOneWidget);
     });
 
-    testWidgets('PaymentsPayoutsScreen displays coming soon banner and zero charged methods', (tester) async {
+    testWidgets('PaymentsPayoutsScreen explains disabled money movement and no payout requirement', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -124,9 +124,12 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('Payments & payouts — Coming soon'), findsOneWidget);
-      expect(find.textContaining('disabled in this beta release'), findsOneWidget);
-      expect(find.text('No payout account connected'), findsOneWidget);
+      expect(find.text('Payments & payouts'), findsOneWidget);
+      expect(find.text('Agree and settle directly'), findsOneWidget);
+      expect(find.textContaining('does not collect, charge, hold'), findsOneWidget);
+      expect(find.text('Outside payments are not protected by ShipdeHop'), findsOneWidget);
+      expect(find.text('No payout account is required'), findsOneWidget);
+      expect(find.text('No payout account connected'), findsNothing);
     });
 
     testWidgets('IdentityBadge displays canonical status states correctly', (tester) async {
@@ -183,7 +186,7 @@ void main() {
             apiClientProvider.overrideWithValue(MockQAApiClient()),
           ],
           child: MaterialApp(
-            home: ExploreScreen(onSelectTab: (idx, {destination, modeIndex, origin}) {}),
+            home: ExploreScreen(onSelectTab: (idx, {DateTime? date, destination, modeIndex, origin}) {}),
           ),
         ),
       );
