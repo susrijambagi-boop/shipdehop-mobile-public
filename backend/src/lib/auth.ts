@@ -31,11 +31,15 @@ export const registerAuth = fp(async function registerAuth(app: FastifyInstance)
       urlPath.startsWith('/dev/auth/') ||
       urlPath.startsWith('/auth/phone/') ||
       urlPath.startsWith('/auth/session/') ||
+      urlPath === '/location/search' ||
+      urlPath === '/location/reverse' ||
       routePath === '/health' ||
       routePath?.startsWith('/webhooks/') ||
       routePath?.startsWith('/dev/auth/') ||
       routePath?.startsWith('/auth/phone/') ||
-      routePath?.startsWith('/auth/session/')
+      routePath?.startsWith('/auth/session/') ||
+      routePath === '/location/search' ||
+      routePath === '/location/reverse'
     ) {
       return;
     }
