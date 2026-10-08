@@ -1,9 +1,16 @@
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { getPhoneVerificationProvider, normalizePhoneNumber } from '../services/phone_verification.js';
-import { JwtSessionManager } from '../services/jwt_session.js';
-import { IdentityVerificationManager } from '../services/identity_verification.js';
+
 import { config } from '../config.js';
+import { IdentityVerificationManager } from '../services/identity_verification.js';
+import { JwtSessionManager } from '../services/jwt_session.js';
+import {
+  consumeWhatsAppOtpSession,
+  getWhatsAppOtpStatus,
+  startWhatsAppOtp,
+  verifyWhatsAppOtp,
+} from '../services/whatsapp_otp.js';
+import { whatsappOtpBridge } from '../services/whatsapp_otp_bridge.js';
 
 function parseCookie(cookieHeader: string | undefined, name: string): string | undefined {
   if (!cookieHeader) return undefined;
@@ -11,25 +18,30 @@ function parseCookie(cookieHeader: string | undefined, name: string): string | u
   return match && match[1] ? decodeURIComponent(match[1]) : undefined;
 }
 
+function errorStatus(error: any, fallback = 400): number {
+  const status = Number(error?.statusCode);
+  return Number.isInteger(status) && status >= 400 && status <= 599 ? status : fallback;
+}
+
+function isAdmin(request: any): boolean {
+  return request?.authUser?.app_metadata?.role?.toString().trim().toLowerCase() === 'admin';
+}
+
 export function isValidAllowedOrigin(origin: string | undefined): boolean {
-  if (!origin) return true; // Server-to-server or native mobile non-browser calls
+  if (!origin) return true;
+
   try {
     const url = new URL(origin);
-    const originNormalized = `${url.protocol}//${url.host}`.toLowerCase();
+    const normalized = `${url.protocol}//${url.host}`.toLowerCase();
 
     const allowed = config.ALLOWED_ORIGINS && config.ALLOWED_ORIGINS.length > 0
-      ? config.ALLOWED_ORIGINS.map((o: string) => o.toLowerCase())
+      ? config.ALLOWED_ORIGINS.map((item: string) => item.toLowerCase())
       : ['https://shipdehop-app.pages.dev'];
 
-    if (allowed.includes(originNormalized)) {
-      return true;
-    }
+    if (allowed.includes(normalized)) return true;
 
     if (config.NODE_ENV !== 'production') {
-      const hostname = url.hostname;
-      if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        return true;
-      }
+      return url.hostname === 'localhost' || url.hostname === '127.0.0.1';
     }
 
     return false;
@@ -39,95 +51,120 @@ export function isValidAllowedOrigin(origin: string | undefined): boolean {
 }
 
 export const phoneVerificationRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
-  // 1. Start phone verification session
+  // 1. Generate + deliver a 6-digit OTP to the user's WhatsApp number.
   fastify.post('/auth/phone/start', async (request, reply) => {
     if (!config.PHONE_VERIFICATION_ENABLED && config.NODE_ENV === 'production') {
-      return reply.code(503).send({ error: 'Phone verification is currently disabled in production.' });
+      return reply.code(503).send({
+        error: 'PHONE_VERIFICATION_DISABLED',
+        message: 'Phone verification is currently unavailable.',
+      });
     }
 
-    const bodySchema = z.object({
+    const parsed = z.object({
       phoneNumber: z.string().min(5),
       countryCode: z.string().default('+91'),
-    });
+    }).safeParse(request.body);
 
-    const parsed = bodySchema.safeParse(request.body);
     if (!parsed.success) {
-      return reply.code(400).send({ error: 'Invalid phone number or country code' });
-    }
-
-    try {
-      const normalized = normalizePhoneNumber(parsed.data.phoneNumber, parsed.data.countryCode);
-      const provider = getPhoneVerificationProvider();
-      const result = await provider.startVerification(normalized);
-
-      return reply.send({
-        sessionId: result.sessionId,
-        challenge: result.challenge,
-        whatsappUrl: result.whatsappUrl,
-        expiresAt: result.expiresAt,
-        phoneE164: normalized,
+      return reply.code(400).send({
+        error: 'INVALID_PHONE',
+        message: 'Enter a valid Indian mobile number.',
       });
-    } catch (e: any) {
-      const msg = e.message || 'Failed to start phone verification';
-      const isRateLimit = msg.includes('Please wait 30 seconds') || msg.includes('Too many active verification');
-      return reply.code(isRateLimit ? 429 : 400).send({ error: msg });
-    }
-  });
-
-  // 2. Read-only phone verification status check (Does NOT mint tokens or set cookies)
-  fastify.get('/auth/phone/status/:sessionId', async (request, reply) => {
-    const paramsSchema = z.object({
-      sessionId: z.string().uuid(),
-    });
-
-    const parsed = paramsSchema.safeParse(request.params);
-    if (!parsed.success) {
-      return reply.code(400).send({ error: 'Invalid session ID' });
     }
 
     try {
-      const provider = getPhoneVerificationProvider();
-      const status = await provider.getSessionStatus(parsed.data.sessionId);
-      return reply.send(status);
-    } catch (e: any) {
-      return reply.code(404).send({ error: e.message || 'Session not found' });
+      const result = await startWhatsAppOtp(parsed.data.phoneNumber, parsed.data.countryCode);
+      return reply.send(result);
+    } catch (error: any) {
+      return reply.code(errorStatus(error, 503)).send({
+        error: errorStatus(error) === 429 ? 'OTP_RATE_LIMITED' : 'WHATSAPP_OTP_SEND_FAILED',
+        message: error?.message || 'Could not send WhatsApp OTP.',
+      });
     }
   });
 
-  // 3. Single-Use Exchange: Atomically consumes verified session and mints JWT + HttpOnly refresh cookie
+  // 2. Verify the 6-digit OTP. Verification itself never creates a login token.
+  fastify.post('/auth/phone/verify', async (request, reply) => {
+    const parsed = z.object({
+      sessionId: z.string().uuid(),
+      otp: z.string().regex(/^\d{6}$/),
+    }).safeParse(request.body);
+
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'INVALID_OTP_PAYLOAD',
+        message: 'Enter the 6-digit WhatsApp OTP.',
+      });
+    }
+
+    try {
+      return reply.send(await verifyWhatsAppOtp(parsed.data.sessionId, parsed.data.otp));
+    } catch (error: any) {
+      return reply.code(errorStatus(error)).send({
+        error: 'OTP_VERIFICATION_FAILED',
+        message: error?.message || 'OTP verification failed.',
+      });
+    }
+  });
+
+  // 3. Read-only status for session restore / expiry handling.
+  fastify.get('/auth/phone/status/:sessionId', async (request, reply) => {
+    const parsed = z.object({ sessionId: z.string().uuid() }).safeParse(request.params);
+
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'INVALID_SESSION_ID',
+        message: 'Invalid OTP session.',
+      });
+    }
+
+    try {
+      return reply.send(await getWhatsAppOtpStatus(parsed.data.sessionId));
+    } catch (error: any) {
+      return reply.code(errorStatus(error, 404)).send({
+        error: 'OTP_SESSION_NOT_FOUND',
+        message: error?.message || 'OTP session not found.',
+      });
+    }
+  });
+
+  // 4. Single-use exchange of a verified OTP session for the ShipdeHop session.
   fastify.post('/auth/phone/exchange', async (request, reply) => {
     if (!config.PHONE_VERIFICATION_ENABLED && config.NODE_ENV === 'production') {
-      return reply.code(503).send({ error: 'Phone verification is currently disabled in production.' });
+      return reply.code(503).send({
+        error: 'PHONE_VERIFICATION_DISABLED',
+        message: 'Phone verification is currently unavailable.',
+      });
     }
 
     const origin = request.headers.origin || request.headers.referer;
-    if (!isValidAllowedOrigin(origin)) {
-      return reply.code(403).send({ error: 'Forbidden origin for session exchange' });
+    const nativeMobile = !origin && request.headers['x-shipdehop-client'] === 'mobile';
+    if (!nativeMobile && !isValidAllowedOrigin(origin)) {
+      return reply.code(403).send({
+        error: 'FORBIDDEN_ORIGIN',
+        message: 'Forbidden origin for session exchange.',
+      });
     }
 
-    const bodySchema = z.object({
-      sessionId: z.string().uuid(),
-    });
-
-    const parsed = bodySchema.safeParse(request.body);
+    const parsed = z.object({ sessionId: z.string().uuid() }).safeParse(request.body);
     if (!parsed.success) {
-      return reply.code(400).send({ error: 'Invalid exchange payload. Valid sessionId is required.' });
+      return reply.code(400).send({
+        error: 'INVALID_EXCHANGE_PAYLOAD',
+        message: 'A valid verified OTP session is required.',
+      });
     }
 
     try {
-      const provider = getPhoneVerificationProvider();
-      // Atomically consume verification session (fails if already consumed, unverified, or expired)
-      const { phoneE164 } = await provider.consumeSession(parsed.data.sessionId);
+      const { phoneE164 } = await consumeWhatsAppOtpSession(parsed.data.sessionId);
 
-      // Locate or create canonical Supabase auth.users UUID
       const canonicalUserId = await JwtSessionManager.getOrCreateCanonicalUserByPhone(phoneE164);
-      // Mint short-lived access JWT (15-min TTL)
       const accessToken = JwtSessionManager.mintUserAccessJwt(canonicalUserId, phoneE164);
-      // Create single-use refresh token session
       const { refreshToken, expiresAt } = await JwtSessionManager.createRefreshSession(canonicalUserId);
 
-      // Issue HttpOnly, Secure cookie at /api/auth/session
-      reply.header('Set-Cookie', `shipdehop_refresh_token=${refreshToken}; Path=/api/auth/session; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
+      reply.header(
+        'Set-Cookie',
+        `shipdehop_refresh_token=${refreshToken}; Path=/auth/session; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`,
+      );
 
       const identity = await IdentityVerificationManager.getIdentity(canonicalUserId);
       const identityStatus = identity?.verificationStatus || 'NOT_STARTED';
@@ -140,17 +177,25 @@ export const phoneVerificationRoutes: FastifyPluginAsync = async (fastify: Fasti
         identityStatus,
         isIdentityVerified: identityStatus === 'VERIFIED',
         sessionExpiresAt: expiresAt.toISOString(),
+        ...(nativeMobile ? { refreshToken } : {}),
       });
-    } catch (e: any) {
-      return reply.code(400).send({ error: e.message || 'Failed to exchange verification session' });
+    } catch (error: any) {
+      return reply.code(errorStatus(error)).send({
+        error: 'SESSION_EXCHANGE_FAILED',
+        message: error?.message || 'Failed to create ShipdeHop session.',
+      });
     }
   });
 
-  // 4. Refresh Token Rotation (Supports HttpOnly Cookie & Body Token)
+  // Session rotation.
   fastify.post('/auth/session/refresh', async (request, reply) => {
     const origin = request.headers.origin || request.headers.referer;
-    if (!isValidAllowedOrigin(origin)) {
-      return reply.code(403).send({ error: 'Forbidden origin for session refresh' });
+    const nativeMobile = !origin && request.headers['x-shipdehop-client'] === 'mobile';
+    if (!nativeMobile && !isValidAllowedOrigin(origin)) {
+      return reply.code(403).send({
+        error: 'FORBIDDEN_ORIGIN',
+        message: 'Forbidden origin for session refresh.',
+      });
     }
 
     const cookieToken = parseCookie(request.headers.cookie, 'shipdehop_refresh_token');
@@ -158,15 +203,20 @@ export const phoneVerificationRoutes: FastifyPluginAsync = async (fastify: Fasti
     const token = cookieToken || bodyToken;
 
     if (!token || typeof token !== 'string' || token.length < 10) {
-      return reply.code(401).send({ error: 'Missing or invalid refresh session token' });
+      return reply.code(401).send({
+        error: 'MISSING_REFRESH_TOKEN',
+        message: 'Missing or invalid refresh session token.',
+      });
     }
 
     try {
       const deviceId = (request.body as any)?.deviceId;
       const result = await JwtSessionManager.rotateRefreshSession(token, deviceId);
 
-      // Set rotated HttpOnly cookie at /api/auth/session
-      reply.header('Set-Cookie', `shipdehop_refresh_token=${result.newRefreshToken}; Path=/api/auth/session; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
+      reply.header(
+        'Set-Cookie',
+        `shipdehop_refresh_token=${result.newRefreshToken}; Path=/auth/session; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`,
+      );
 
       const identity = await IdentityVerificationManager.getIdentity(result.userId);
       const identityStatus = identity?.verificationStatus || 'NOT_STARTED';
@@ -177,100 +227,81 @@ export const phoneVerificationRoutes: FastifyPluginAsync = async (fastify: Fasti
         identityStatus,
         isIdentityVerified: identityStatus === 'VERIFIED',
         expiresAt: result.expiresAt.toISOString(),
+        ...(nativeMobile ? { refreshToken: result.newRefreshToken } : {}),
       });
-    } catch (e: any) {
-      return reply.code(401).send({ error: e.message || 'Refresh failed' });
+    } catch (error: any) {
+      return reply.code(401).send({
+        error: 'REFRESH_FAILED',
+        message: error?.message || 'Refresh failed.',
+      });
     }
   });
 
-  // 5. Logout / Session Revocation
   fastify.post('/auth/session/logout', async (request, reply) => {
     const origin = request.headers.origin || request.headers.referer;
-    if (!isValidAllowedOrigin(origin)) {
-      return reply.code(403).send({ error: 'Forbidden origin for logout' });
+    const nativeMobile = !origin && request.headers['x-shipdehop-client'] === 'mobile';
+    if (!nativeMobile && !isValidAllowedOrigin(origin)) {
+      return reply.code(403).send({
+        error: 'FORBIDDEN_ORIGIN',
+        message: 'Forbidden origin for logout.',
+      });
     }
 
     const cookieToken = parseCookie(request.headers.cookie, 'shipdehop_refresh_token');
     const bodyToken = (request.body as any)?.refreshToken;
     const token = cookieToken || bodyToken;
+    if (token) await JwtSessionManager.revokeSession(token);
 
-    if (token) {
-      await JwtSessionManager.revokeSession(token);
-    }
+    reply.header(
+      'Set-Cookie',
+      'shipdehop_refresh_token=; Path=/auth/session; HttpOnly; Secure; SameSite=Lax; Max-Age=0',
+    );
 
-    // Clear refresh cookie at /api/auth/session
-    reply.header('Set-Cookie', 'shipdehop_refresh_token=; Path=/api/auth/session; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
-
-    return reply.send({ success: true, message: 'Session logged out' });
+    return reply.send({ success: true });
   });
 
-  // 6. Inbound WhatsApp Cloud API Webhook (Verification handshake)
-  fastify.get('/webhooks/whatsapp', async (request, reply) => {
-    if (config.PHONE_VERIFICATION_PROVIDER !== 'WHATSAPP_INBOUND') {
-      return reply.code(403).send({ error: 'WhatsApp webhooks disabled under MANUAL_BETA provider mode.' });
+  // Admin-only linked-device controls.
+  fastify.get('/admin/whatsapp/status', async (request, reply) => {
+    if (!isAdmin(request)) {
+      return reply.code(403).send({
+        error: 'ADMIN_REQUIRED',
+        message: 'Admin access required.',
+      });
     }
 
-    const query = request.query as Record<string, string>;
-    const mode = query['hub.mode'];
-    const token = query['hub.verify_token'];
-    const challenge = query['hub.challenge'];
-
-    if (mode === 'subscribe' && token === config.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
-      return reply.code(200).send(challenge);
-    }
-    return reply.code(403).send({ error: 'Forbidden webhook verification' });
+    return reply.send(whatsappOtpBridge.getStatus());
   });
 
-  // 7. Inbound WhatsApp Cloud API Webhook (Event Notification)
-  fastify.post('/webhooks/whatsapp', async (request, reply) => {
-    if (config.PHONE_VERIFICATION_PROVIDER !== 'WHATSAPP_INBOUND') {
-      return reply.code(403).send({ error: 'WhatsApp webhooks disabled under MANUAL_BETA provider mode.' });
+  fastify.post('/admin/whatsapp/pairing-code', async (request, reply) => {
+    if (!isAdmin(request)) {
+      return reply.code(403).send({
+        error: 'ADMIN_REQUIRED',
+        message: 'Admin access required.',
+      });
+    }
+
+    const parsed = z.object({
+      phoneNumber: z.string().min(10).max(20),
+    }).safeParse(request.body);
+
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'INVALID_SENDER_PHONE',
+        message: 'Enter the WhatsApp sender number with country code.',
+      });
     }
 
     try {
-      const body = request.body as any;
-      if (body?.entry) {
-        for (const entry of body.entry) {
-          if (entry.changes) {
-            for (const change of entry.changes) {
-              const value = change.value;
-              if (value?.messages) {
-                for (const msg of value.messages) {
-                  const senderPhone = '+' + msg.from;
-                  const textBody = msg.text?.body || '';
-                  const provider = getPhoneVerificationProvider();
-                  await provider.processInboundMessage(senderPhone, textBody);
-                }
-              }
-            }
-          }
-        }
-      }
-      return reply.code(200).send({ status: 'ok' });
-    } catch (e: any) {
-      fastify.log.error(e);
-      return reply.code(200).send({ status: 'error_logged' });
+      const pairingCode = await whatsappOtpBridge.requestPairingCode(parsed.data.phoneNumber);
+      return reply.send({
+        pairingCode,
+        instructions: 'WhatsApp > Settings > Linked Devices > Link a Device > Link with phone number instead.',
+      });
+    } catch (error: any) {
+      return reply.code(503).send({
+        error: 'PAIRING_CODE_FAILED',
+        message: error?.message || 'Could not generate WhatsApp pairing code.',
+      });
     }
-  });
-
-  // 8. Development/Test simulated inbound verification (Disabled in production)
-  fastify.post('/auth/phone/dev-simulate-inbound', async (request, reply) => {
-    if (config.NODE_ENV === 'production') {
-      return reply.code(403).send({ error: 'Endpoint forbidden in production.' });
-    }
-
-    const bodySchema = z.object({
-      senderPhone: z.string(),
-      messageText: z.string(),
-    });
-
-    const parsed = bodySchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply.code(400).send({ error: 'Invalid input' });
-    }
-
-    const provider = getPhoneVerificationProvider();
-    const result = await provider.processInboundMessage(parsed.data.senderPhone, parsed.data.messageText);
-    return reply.send(result);
   });
 };
