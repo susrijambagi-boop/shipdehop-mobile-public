@@ -1,0 +1,44 @@
+name: Free UGC continuity test
+on:
+  pull_request:
+    paths:
+      - 'marketing/ugc/generate_continuity.py'
+      - '.github/workflows/shipdehop-ugc-continuity.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        scene: [0, 2, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install FFmpeg and Python dependencies
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          python -m pip install -r marketing/ugc/requirements.txt
+      - name: Fetch reference video from prior run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p ugc-reference
+          gh run download 39747354499 --repo susrijambagi-boop/shipdehop-mobile-public --name ShipdeHop-AI-UGC-video --dir ugc-reference
+          ffmpeg -y -loglevel error -ss 0.8 -i ugc-reference/scene_1.mp4 -frames:v 1 -update 1 ugc-anchor.jpg
+          test -s ugc-anchor.jpg
+      - name: Generate consistent actor scene
+        run: python marketing/ugc/generate_continuity.py --scene ${{ matrix.scene }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: free-continuity-scene-${{ matrix.scene }}
+          path: ugc-output/
+          retention-days: 3
+          if-no-files-found: warn
