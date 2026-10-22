@@ -1,0 +1,65 @@
+name: ShipdeHop zero-cost AI UGC experiment
+on:
+  pull_request:
+    paths:
+      - 'marketing/ugc/**'
+      - '.github/workflows/shipdehop-ugc-free.yml'
+permissions:
+  contents: read
+jobs:
+  generate:
+    name: Generate clip ${{ matrix.scene }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        scene: [0, 1, 2, 3, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: python -m pip install -r marketing/ugc/requirements.txt
+      - name: Generate AI footage via free ZeroGPU
+        run: python marketing/ugc/generate.py scene --scene ${{ matrix.scene }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: generated-scene-${{ matrix.scene }}
+          path: ugc-output/
+          if-no-files-found: warn
+          retention-days: 3
+  assemble:
+    name: Assemble AI UGC
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    if: always()
+    needs: [generate]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install FFmpeg and dependencies
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+          python -m pip install -r marketing/ugc/requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: generated-scene-*
+          path: ugc-output/
+          merge-multiple: true
+      - name: Synthesize natural Indian Hinglish voices
+        run: python marketing/ugc/generate.py voice
+      - name: Assemble all generated scene clips
+        run: python marketing/ugc/generate.py assemble
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ShipdeHop-AI-UGC-video
+          path: ugc-output/
+          if-no-files-found: warn
+          retention-days: 7
