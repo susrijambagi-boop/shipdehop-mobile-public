@@ -1,9 +1,6 @@
 name: ShipdeHop zero-cost AI UGC experiment
 on:
-  pull_request:
-    paths:
-      - 'marketing/ugc/**'
-      - '.github/workflows/shipdehop-ugc-free.yml'
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
