@@ -21,7 +21,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install -r marketing/ugc/requirements.txt
+      - name: Install FFmpeg and Python dependencies
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          python -m pip install -r marketing/ugc/requirements.txt
       - name: Fetch reference video from prior run
         env:
           GH_TOKEN: ${{ github.token }}
